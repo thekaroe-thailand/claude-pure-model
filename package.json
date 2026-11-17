@@ -1,0 +1,14 @@
+{
+  "name": "pure-haiku",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ตรวจว่า claude-haiku-5-5 ของ Tenixe เป็น Claude จริงไหม — เทียบลายนิ้วมือ tokenizer กับ Claude ตัวจริงและ Nemotron",
+  "type": "module",
+  "scripts": {
+    "prove": "node prove.mjs",
+    "compare": "node compare.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.9.0"
+  }
+}
