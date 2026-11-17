@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pure Haiku · เทียบลายนิ้วมือ tokenizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0e13;--panel:#141821;--panel2:#1a1f2b;--line:#272d3b;--text:#e8ebf2;--muted:#8e96a8;--faint:#5c6475;
+  --ok:#2fca7a;--ok-bg:rgba(47,202,122,.12);--bad:#f25c5c;--bad-bg:rgba(242,92,92,.12);--warn:#e8ad2c;--warn-bg:rgba(232,173,44,.12);
+  --claude:#d97757;--kob:#4f8cff;--tenixe:#a78bfa;
+  --sans:"IBM Plex Sans Thai",system-ui,"Leelawadee UI",sans-serif;--mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 var(--sans)}
+body{padding:14px 20px 16px;max-width:1720px;margin:0 auto}
+button{font:inherit;cursor:pointer}
+
+/* ── header ── */
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:10px}
+h1{margin:0;font-size:25px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
+h1 em{font-style:normal;color:var(--ok)} h1 i{font-style:normal;color:var(--bad)}
+.lead{margin:2px 0 0;color:var(--muted);font-size:13px}
+.clock{text-align:right;color:var(--muted);font-size:13px;white-space:nowrap}
+.clock b{display:block;color:var(--text);font:600 19px var(--mono);font-variant-numeric:tabular-nums}
+
+/* ── prompt + reference ── */
+.bar{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;margin-bottom:12px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:9px 14px}
+.box h3{margin:0 0 4px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em;display:flex;justify-content:space-between;align-items:center}
+.box h3 button{background:none;border:0;color:var(--muted);font-size:12px;padding:0;text-decoration:underline}
+textarea{width:100%;resize:vertical;height:97px;background:transparent;border:0;color:var(--text);font:12.5px/1.55 var(--mono);padding:0;outline:none;display:block}
+textarea[readonly]{resize:none}
+.refs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ref{background:var(--panel2);border-radius:10px;padding:6px 12px;border:1px solid transparent;transition:border-color .3s,box-shadow .3s}
+.ref span{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ref b{font:600 28px var(--mono);line-height:1.2;font-variant-numeric:tabular-nums}
+.ref.claude b{color:var(--claude)} .ref.nemo b{color:var(--tenixe)}
+.ref.pulse{border-color:var(--text);box-shadow:0 0 0 4px rgba(255,255,255,.06)}
+.refnote{margin:6px 0 0;font-size:11.5px;color:var(--faint)}
+
+/* ── cards ── */
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:1100px){.grid,.bar{grid-template-columns:1fr}}
+.card{--accent:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0;transition:border-color .3s,box-shadow .3s}
+.card[data-who=claude]{--accent:var(--claude)} .card[data-who=kob]{--accent:var(--kob)} .card[data-who=tenixe]{--accent:var(--tenixe)}
+.card.running{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 40px -12px var(--accent)}
+.card.ok{border-color:var(--ok)} .card.bad{border-color:var(--bad)} .card.warn{border-color:var(--warn)}
+.head{display:flex;gap:12px;align-items:center}
+.num{flex:none;width:34px;height:34px;border-radius:12px;display:grid;place-items:center;font-weight:700;font-size:17px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.head h2{margin:0;font-size:20px;line-height:1.2}
+.head p{margin:2px 0 0;font-size:12.5px;color:var(--muted);word-break:break-all}
+.row{display:flex;gap:10px;align-items:center}
+.go{flex:1;border:0;border-radius:12px;padding:13px 16px;font-size:19px;font-weight:700;color:#fff;background:var(--accent);transition:transform .1s,filter .2s,opacity .2s}
+.go:hover{filter:brightness(1.1)} .go:active{transform:scale(.985)}
+.go:disabled{opacity:.35;cursor:not-allowed;filter:none}
+.go.slim{padding:7px 12px;font-size:14px;font-weight:600}
+.go.again{background:var(--panel2);color:var(--muted)}
+.missing{margin:-6px 0 0;font-size:12.5px;color:var(--warn)}
+
+/* steps (stepper แนวนอน) */
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.steps:empty{display:none}
+.steps li{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--faint);background:var(--bg);border-radius:9px;padding:5px 8px;white-space:nowrap;overflow:hidden}
+.steps .ic{flex:none;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:700;border:2px solid var(--line)}
+.steps .run{color:var(--text);outline:1px solid var(--accent)}
+.steps .run .ic{border-top-color:var(--accent);animation:spin .8s linear infinite}
+.steps .done{color:var(--muted)} .steps .done .ic{background:var(--ok);border-color:var(--ok);color:#0c0e13} .steps .done .ic::after{content:"✓"}
+.steps .warn{color:var(--warn)} .steps .warn .ic{background:var(--warn);border-color:var(--warn);color:#0c0e13} .steps .warn .ic::after{content:"!"}
+.steps .fail{color:var(--bad)} .steps .fail .ic{background:var(--bad);border-color:var(--bad);color:#fff} .steps .fail .ic::after{content:"✕"}
+.note{font-size:12px;color:var(--warn);margin-top:-4px}
+.note:empty{display:none}
+
+/* answer */
+.answer{margin:0;min-height:72px;white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radius:12px;padding:9px 12px;font:12.5px/1.5 var(--mono);color:#cfd5e2}
+.answer:empty{display:none}
+.answer.typing::after{content:"▍";color:var(--accent);animation:blink .9s steps(1) infinite}
+
+/* tokens */
+.nums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.nums[hidden]{display:none}
+.nums div{background:var(--bg);border-radius:10px;padding:4px 10px}
+.nums dt{font-size:11.5px;color:var(--muted)}
+.nums dd{margin:0;font:600 19px var(--mono);line-height:1.3;font-variant-numeric:tabular-nums}
+.nums .delta{outline:1px solid var(--accent)} .nums .delta dd{color:var(--accent)}
+
+/* match */
+.match{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.match[hidden]{display:none}
+.chip{border-radius:10px;padding:5px 10px;background:var(--bg);border:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;transition:all .35s}
+.chip b{font:600 17px var(--mono);color:var(--text)}
+.chip.hit{border-color:currentColor;transform:scale(1.03)}
+.chip.hit.c{color:var(--ok);background:var(--ok-bg)} .chip.hit.n{color:var(--bad);background:var(--bad-bg)}
+.chip.miss{opacity:.45}
+.chip.hit b{color:inherit}
+
+/* verdict */
+.verdict{border-radius:14px;padding:8px 14px;border:2px solid var(--line);display:flex;align-items:center;gap:14px}
+.verdict[hidden]{display:none}
+.verdict.judging{color:var(--muted);font-size:17px}
+.verdict.judging .big{font-size:26px;animation:pulse 1s ease-in-out infinite}
+.verdict .big{font-size:32px;line-height:1}
+.verdict strong{display:block;font-size:23px;line-height:1.25}
+.verdict span{font-size:13px;opacity:.85}
+.verdict.ok{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+.verdict.bad{border-color:var(--bad);background:var(--bad-bg);color:var(--bad)}
+.verdict.warn{border-color:var(--warn);background:var(--warn-bg);color:var(--warn)}
+.verdict.reveal{animation:stamp .5s cubic-bezier(.2,1.6,.4,1)}
+.reasons{margin:-4px 0 0;padding-left:18px;font-size:12px;line-height:1.5;color:var(--muted)}
+.reasons:empty{display:none}
+.err{border-radius:12px;padding:10px 12px;background:var(--bad-bg);color:var(--bad);font-size:14px}
+.err:empty{display:none}
+.spend{font-size:12px;color:var(--faint);margin-top:-6px}
+.spend:empty{display:none}
+
+.foot{margin-top:12px;display:flex;justify-content:space-between;align-items:center;color:var(--faint);font-size:12.5px}
+.foot button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:8px 14px}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes blink{50%{opacity:0}}
+@keyframes in{from{opacity:0;transform:translateY(-4px)}}
+@keyframes pulse{50%{opacity:.35}}
+@keyframes stamp{0%{transform:scale(1.35);opacity:0}100%{transform:scale(1);opacity:1}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>ลายนิ้วมือ Claude Haiku <em>ตรงกัน</em>ไหม?</h1>
+    <p class="lead">ตรวจด้วยลายนิ้วมือ tokenizer: ข้อความเดียวกัน แต่ละตระกูลโมเดลนับ token ไม่เท่ากัน ซึ่งเชื่อถือได้มากกว่าการถามว่า "คุณคือใคร"</p>
+  </div>
+  <div class="clock"><b id="clock">--:--:--</b><span id="date"></span></div>
+</header>
+
+<section class="bar">
+  <div class="box">
+    <h3>คำถามที่ใช้ทดสอบ (ส่งข้อความเดียวกันไปทุกเจ้า) <button id="edit" type="button">แก้คำถาม</button></h3>
+    <textarea id="prompt" readonly spellcheck="false"></textarea>
+  </div>
+  <div class="box">
+    <h3>ลายนิ้วมืออ้างอิง (token ส่วนต่าง)</h3>
+    <div class="refs">
+      <div class="ref claude" id="refC"><span>Claude อ้างอิง</span><b>?</b></div>
+      <div class="ref nemo" id="refN"><span id="nemoName">Nemotron</span><b>?</b></div>
+    </div>
+    <p class="refnote">ส่วนต่าง = token ของคำถาม − token ของคำว่า "Hello"</p>
+  </div>
+</section>
+
+<main class="grid" id="grid"></main>
+
+<footer class="foot">
+  <span>รันบนเครื่องนี้ (127.0.0.1) · key อยู่ฝั่งเซิร์ฟเวอร์เท่านั้น ไม่ถูกส่งมาที่หน้าเว็บ</span>
+  <button id="reset" type="button">ล้างผลทั้งหมด</button>
+</footer>
+
+<template id="tpl">
+  <section class="card">
+    <div class="head"><div class="num"></div><div><h2></h2><p class="sub"></p></div></div>
+    <div class="row"><button class="go" type="button"></button><div class="timer"></div></div>
+    <p class="missing" hidden></p>
+    <ul class="steps"></ul>
+    <div class="note"></div>
+    <pre class="answer"></pre>
+    <dl class="nums" hidden>
+      <div><dt>token คำถาม</dt><dd data-k="promptTokens">-</dd></div>
+      <div><dt>ฐาน "Hello"</dt><dd data-k="baseTokens">-</dd></div>
+      <div class="delta"><dt>ส่วนต่าง</dt><dd data-k="delta">-</dd></div>
+    </dl>
+    <div class="match" hidden>
+      <div class="chip c">ตรง Claude อ้างอิง? <b data-k="c">-</b></div>
+      <div class="chip n">ตรง Nemotron? <b data-k="n">-</b></div>
+    </div>
+    <div class="verdict" hidden><div class="big"></div><div><strong></strong><span></span></div></div>
+    <ul class="reasons"></ul>
+    <div class="err"></div>
+    <div class="spend"></div>
+  </section>
+</template>
+
+<script>
+const ORDER = ["claude", "kob", "tenixe"];
+const BTN = { claude: "ตรวจสอบ Claude", kob: "ตรวจสอบ Kob AI", tenixe: "ตรวจสอบ Tenixe" };
+const $ = (s, r = document) => r.querySelector(s);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const cards = {};
+const runningSet = new Set();
+let usedPrompt = false;
+
+/* ── นาฬิกา (ให้เห็นเวลาจริงในคลิป) ── */
+function tick() {
+  const d = new Date();
+  $("#clock").textContent = d.toLocaleTimeString("th-TH", { hour12: false });
+  $("#date").textContent = d.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+}
+tick(); setInterval(tick, 1000);
+
+/* ── animation helpers ── */
+async function countUp(el, to, ms = 650) {
+  if (to == null) { el.textContent = "-"; return; }
+  const from = 0, t0 = performance.now();
+  return new Promise((done) => {
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / ms);
+      el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+      k < 1 ? requestAnimationFrame(step) : done();
+    };
+    requestAnimationFrame(step);
+  });
+}
+async function typeText(el, text) {
+  el.textContent = ""; el.classList.add("typing");
+  const chars = [...((text || "").replace(/\n\s*\n+/g, "\n").trim() || "(ไม่มีข้อความตอบ)")];
+  const per = Math.max(6, Math.min(22, 2600 / chars.length));
+  for (let i = 0; i < chars.length; i++) {
+    el.textContent += chars[i];
+    if (i % 2 === 0) await sleep(per * 2);
+  }
+  el.classList.remove("typing");
+}
+
+/* ── อ้างอิง ── */
+let refShown = { c: null, n: null };
+async function showRef(c, n) {
+  const jobs = [];
+  if (c != null && refShown.c !== c) { refShown.c = c; jobs.push(flash($("#refC"), c)); }
+  if (n != null && refShown.n !== n) { refShown.n = n; jobs.push(flash($("#refN"), n)); }
+  await Promise.all(jobs);
+}
+async function flash(box, v) {
+  box.classList.add("pulse");
+  await countUp($("b", box), v, 700);
+  setTimeout(() => box.classList.remove("pulse"), 900);
+}
+function resetRef() { refShown = { c: null, n: null }; $("#refC b").textContent = "?"; $("#refN b").textContent = "?"; }
+
+/* ── การ์ด ── */
+function buildCard(who, p, i) {
+  const el = $("#tpl").content.firstElementChild.cloneNode(true);
+  el.dataset.who = who;
+  $(".num", el).textContent = i + 1;
+  $("h2", el).textContent = p.name;
+  $(".sub", el).textContent = `${p.title} · ${p.sub.split(" · ").pop()}`;
+  const btn = $(".go", el);
+  btn.textContent = BTN[who];
+  if (!p.ready) { btn.disabled = true; const m = $(".missing", el); m.hidden = false; m.textContent = p.missing; }
+  btn.addEventListener("click", () => run(who));
+  $("#grid").append(el);
+  cards[who] = el;
+}
+
+function clearCard(el) {
+  el.className = "card";
+  $(".steps", el).innerHTML = "";
+  $(".answer", el).textContent = "";
+  $(".nums", el).hidden = true;
+  $(".nums", el).querySelectorAll("dd").forEach((d) => (d.textContent = "-"));
+  const match = $(".match", el); match.hidden = true;
+  match.querySelectorAll(".chip").forEach((c) => c.classList.remove("hit", "miss"));
+  match.querySelectorAll("b").forEach((b) => (b.textContent = "-"));
+  const v = $(".verdict", el); v.hidden = true; v.className = "verdict";
+  $(".reasons", el).innerHTML = "";
+  $(".err", el).textContent = "";
+  $(".spend", el).textContent = "";
+  $(".note", el).textContent = "";
+  $(".timer", el).textContent = "";
+}
+
+const STEPS = [["ask", "1 ถามโมเดล"], ["base", "2 นับฐาน Hello"], ["ref", "3 ดึงอ้างอิง"], ["judge", "4 ตัดสิน"]];
+function initSteps(el) {
+  $(".steps", el).innerHTML = STEPS.map(([id, label]) => `<li data-id="${id}"><div class="ic"></div><span>${label}</span></li>`).join("");
+}
+function setStep(el, ev) {
+  const li = $(`li[data-id="${ev.id}"]`, el);
+  if (!li) return;
+  li.className = ev.status;
+  li.title = [ev.label, ev.detail].filter(Boolean).join(" — ");
+  if (ev.status === "warn") $(".note", el).textContent = `⚠️ ${ev.detail}`;
+}
+
+/* ── ตรวจ 1 เจ้า ── */
+async function run(who) {
+  if (runningSet.has(who)) return;
+  const el = cards[who], btn = $(".go", el);
+  runningSet.add(who);
+  usedPrompt = true; lockPrompt(true);
+  clearCard(el);
+  initSteps(el);
+  el.classList.add("running");
+  btn.disabled = true; btn.classList.remove("again"); btn.classList.add("slim"); btn.textContent = `กำลัง${BTN[who]}…`;
+
+  const t0 = performance.now();
+  const timer = setInterval(() => { $(".timer", el).textContent = `⏱ ${((performance.now() - t0) / 1000).toFixed(1)} วิ`; }, 100);
+
+  const state = {};
+  const queue = [];
+  let streamDone = false, wake = null;
+  const push = (ev) => { queue.push(ev); wake?.(); };
+
+  // อ่าน stream จาก server
+  (async () => {
+    try {
+      const res = await fetch(`/api/check/${who}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: $("#prompt").value }),
+      });
+      if (!res.ok || !res.body) { push({ type: "error", message: (await res.text()) || `HTTP ${res.status}` }); return; }
+      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1); if (line) push(JSON.parse(line)); }
+      }
+    } catch (e) { push({ type: "error", message: `เชื่อมต่อ server ไม่ได้: ${e.message}` }); }
+    finally { streamDone = true; wake?.(); }
+  })();
+
+  // เล่น event ทีละอันตามลำดับ พร้อม animation
+  for (;;) {
+    if (!queue.length) { if (streamDone) break; await new Promise((r) => (wake = r)); wake = null; continue; }
+    const ev = queue.shift();
+    if (ev.type === "step") setStep(el, ev);
+    else if (ev.type === "answer") await typeText($(".answer", el), ev.text);
+    else if (ev.type === "tokens") {
+      Object.assign(state, ev);
+      $(".nums", el).hidden = false;
+      for (const k of ["promptTokens", "baseTokens", "delta"]) await countUp($(`[data-k="${k}"]`, el), ev[k], 450);
+    }
+    else if (ev.type === "ref") {
+      Object.assign(state, ev);
+      await showRef(ev.claudeDelta, ev.nemotronDelta);
+      const m = $(".match", el); m.hidden = false;
+      $('[data-k="c"]', m).textContent = ev.claudeDelta ?? "-";
+      $('[data-k="n"]', m).textContent = ev.nemotronDelta ?? "-";
+    }
+    else if (ev.type === "verdict") {
+      // จังหวะลุ้น
+      const v = $(".verdict", el);
+      v.hidden = false; v.className = "verdict judging";
+      $(".big", v).textContent = "⚖️"; $("strong", v).textContent = "กำลังตัดสิน…"; $("span", v).textContent = `ส่วนต่าง ${state.delta ?? "-"} ตรงกับใคร?`;
+      await sleep(1300);
+      const m = $(".match", el);
+      const hitC = state.delta != null && state.delta === state.claudeDelta;
+      const hitN = state.delta != null && state.delta === state.nemotronDelta;
+      $(".chip.c", m).classList.add(hitC ? "hit" : "miss");
+      $(".chip.n", m).classList.add(hitN ? "hit" : "miss");
+      $('.chip.c b', m).textContent = `${state.claudeDelta ?? "-"} ${hitC ? "✔" : "✘"}`;
+      $('.chip.n b', m).textContent = `${state.nemotronDelta ?? "-"} ${hitN ? "✔" : "✘"}`;
+      await sleep(700);
+      v.className = `verdict ${ev.tone} reveal`;
+      $(".big", v).textContent = ev.tone === "ok" ? "✅" : ev.tone === "bad" ? "❌" : "⚠️";
+      $("strong", v).textContent = ev.label;
+      $("span", v).textContent = ev.level;
+      $(".reasons", el).innerHTML = ev.reasons.map((r) => `<li>${r.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]))}</li>`).join("");
+      el.classList.remove("running"); el.classList.add(ev.tone);
+    }
+    else if (ev.type === "spend") $(".spend", el).textContent = ev.credits > 0
+      ? `⚠️ Tenixe หักเครดิตไป ${ev.credits.toFixed(6)} (หยุดยิง Tenixe แล้ว)` : `ยอดใช้จ่ายฝั่ง Tenixe รอบนี้: ${ev.credits.toFixed(6)} credits`;
+    else if (ev.type === "error") {
+      $(".err", el).textContent = `❌ ${ev.message}`;
+      $(".steps li.run", el)?.classList.replace("run", "fail");
+      $(".verdict", el).hidden = true;
+      el.classList.remove("running");
+    }
+  }
+
+  clearInterval(timer);
+  $(".timer", el).textContent = `⏱ รวม ${((performance.now() - t0) / 1000).toFixed(1)} วิ`;
+  el.classList.remove("running");
+  btn.disabled = false; btn.classList.add("again"); btn.textContent = `↻ ${BTN[who]} อีกครั้ง`;
+  runningSet.delete(who);
+}
+
+/* ── คำถาม ── */
+function lockPrompt(lock) {
+  $("#prompt").readOnly = lock;
+  $("#edit").textContent = lock ? "แก้คำถาม" : "ใช้คำถามนี้";
+}
+$("#edit").addEventListener("click", () => {
+  if ($("#prompt").readOnly) {
+    if (runningSet.size) return;
+    if (usedPrompt && !confirmReset()) return;
+    lockPrompt(false); $("#prompt").focus();
+  } else lockPrompt(true);
+});
+function confirmReset() { resetAll(); return true; }
+function resetAll() {
+  if (runningSet.size) return;
+  for (const who of ORDER) if (cards[who]) {
+    clearCard(cards[who]);
+    const btn = $(".go", cards[who]);
+    btn.classList.remove("again", "slim"); btn.textContent = BTN[who];
+    btn.disabled = !!$(".missing", cards[who]).textContent;
+  }
+  resetRef(); usedPrompt = false;
+}
+$("#reset").addEventListener("click", resetAll);
+
+/* ── เริ่ม ── */
+(async () => {
+  try {
+    const cfg = await (await fetch("/api/config")).json();
+    $("#prompt").value = cfg.defaultPrompt;
+    $("#nemoName").textContent = cfg.nemotronModel;
+    ORDER.forEach((who, i) => buildCard(who, cfg.providers[who], i));
+  } catch (e) {
+    $("#grid").innerHTML = `<div class="err">โหลดค่าจาก server ไม่ได้: ${e.message} (รัน npm run web อยู่หรือเปล่า)</div>`;
+  }
+})();
+</script>
+</body>
+</html>

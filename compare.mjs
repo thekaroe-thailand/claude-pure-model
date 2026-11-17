@@ -1,13 +1,13 @@
 /* ═══════════════════════════════════════════════════════════════
    compare.mjs — ส่ง prompt เดียวไป 3 ที่พร้อมกัน แล้วเทียบ 3 หน้าต่าง
-     ① Tenixe  claude-haiku-5-5      (ผู้ต้องสงสัย)
-     ② Anthropic claude-haiku-5-5    (ของแท้แน่นอน — ตัวอ้างอิง)
+     ① Tenixe  claude-haiku-5-5      (ตัวที่ตรวจ)
+     ② Anthropic claude-haiku-5-5    (ค่าอ้างอิง)
      ③ Kob AI  anthropic/claude-haiku-5.5 (ของเรา)
 
-   ตัดสินแท้/ปลอมจาก 2 อย่าง
+   สรุปผลจาก 2 อย่าง
    - หลักฐานหลัก: ลายนิ้วมือ tokenizer ของ prompt นี้
        ส่วนต่าง = token(prompt) − token("Hello")   ← หักส่วนที่แต่ละระบบเติมเองออก
-       เทียบกับ Claude ตัวจริง (count_tokens ของ Anthropic) และ Nemotron (Tenixe ฟรี)
+       เทียบกับ Claude อ้างอิง (count_tokens ของ Anthropic) และ Nemotron (Tenixe ฟรี)
    - หลักฐานเสริม: คำตอบพูดถึง Anthropic/Claude หรือ NVIDIA/Nemotron
 
    รัน:
@@ -146,8 +146,8 @@ function judge(win, ref) {
   const reasons = [];
   let tok = "unknown";
   if (win.delta != null && ref.claudeDelta != null) {
-    if (win.delta === ref.claudeDelta) { tok = "claude"; reasons.push(`✔ tokenizer ตรงกับ Claude ตัวจริง (ส่วนต่าง ${win.delta} = ${ref.claudeDelta})`); }
-    else if (ref.nemotronDelta != null && win.delta === ref.nemotronDelta) { tok = "nemotron"; reasons.push(`✘ tokenizer ตรงกับ Nemotron (ส่วนต่าง ${win.delta}) ไม่ตรง Claude ตัวจริง (${ref.claudeDelta})`); }
+    if (win.delta === ref.claudeDelta) { tok = "claude"; reasons.push(`✔ tokenizer ตรงกับ Claude อ้างอิง (ส่วนต่าง ${win.delta} = ${ref.claudeDelta})`); }
+    else if (ref.nemotronDelta != null && win.delta === ref.nemotronDelta) { tok = "nemotron"; reasons.push(`✘ tokenizer ตรงกับ Nemotron (ส่วนต่าง ${win.delta}) ไม่ตรง Claude อ้างอิง (${ref.claudeDelta})`); }
     else { tok = "other"; reasons.push(`? tokenizer ไม่ตรงทั้ง Claude (${ref.claudeDelta}) และ Nemotron (${ref.nemotronDelta}) — ได้ ${win.delta}`); }
   } else {
     reasons.push("? วัด tokenizer ไม่ได้ (ไม่มีตัวอ้างอิงหรือไม่มีตัวเลข usage)");
@@ -156,11 +156,11 @@ function judge(win, ref) {
   reasons.push(`${id.side === "claude" ? "✔" : id.side === "nvidia" ? "✘" : "?"} ${id.note}`);
 
   let label, level;
-  if (tok === "claude" && id.side !== "nvidia") { label = "แท้"; level = id.side === "claude" ? "มั่นใจสูง" : "มั่นใจ"; }
-  else if (tok === "nemotron") { label = "ปลอม (เป็น Nemotron)"; level = id.side === "nvidia" ? "มั่นใจสูง" : "มั่นใจ"; }
-  else if (tok === "claude" && id.side === "nvidia") { label = "ก้ำกึ่ง"; level = "tokenizer เหมือน Claude แต่บอกว่าเป็น NVIDIA"; }
-  else if (tok === "unknown") { label = id.side === "nvidia" ? "น่าจะปลอม" : id.side === "claude" ? "น่าจะแท้" : "ไม่ทราบ"; level = "หลักฐานอ่อน (ดูจากคำตอบอย่างเดียว)"; }
-  else { label = "น่าสงสัย"; level = "tokenizer ไม่ตรงกับตัวที่รู้จัก"; }
+  if (tok === "claude" && id.side !== "nvidia") { label = "ตรงกับ Claude"; level = id.side === "claude" ? "มั่นใจสูง" : "มั่นใจ"; }
+  else if (tok === "nemotron") { label = "ไม่ตรงกับ Claude"; level = "ลายนิ้วมือตรงกับ Nemotron"; }
+  else if (tok === "claude" && id.side === "nvidia") { label = "ไม่แน่ใจ"; level = "tokenizer ตรงกับ Claude แต่คำตอบบอกว่าเป็น NVIDIA"; }
+  else if (tok === "unknown") { label = id.side === "nvidia" ? "น่าจะไม่ตรงกับ Claude" : id.side === "claude" ? "น่าจะตรงกับ Claude" : "วัดไม่ได้"; level = "หลักฐานอ่อน (ดูจากคำตอบอย่างเดียว)"; }
+  else { label = "ไม่แน่ใจ"; level = "tokenizer ไม่ตรงกับค่าอ้างอิงที่มี"; }
   return { label, level, reasons };
 }
 
@@ -183,7 +183,7 @@ function printWindow(n, w) {
 }
 
 function htmlReport(prompt, windows, ref, startedAt) {
-  const color = (label) => (label.startsWith("แท้") || label.startsWith("น่าจะแท้") ? "ok" : label.startsWith("ปลอม") || label.startsWith("น่าจะปลอม") ? "bad" : "warn");
+  const color = (label) => (label.startsWith("ตรงกับ") || label.startsWith("น่าจะตรงกับ") ? "ok" : label.startsWith("ไม่ตรงกับ") || label.startsWith("น่าจะไม่ตรงกับ") ? "bad" : "warn");
   const cols = windows.map((w, i) => `
     <section class="win">
       <header><div class="n">${i + 1}</div><div><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.sub)}</p></div></header>
@@ -214,10 +214,10 @@ h1{margin:0 0 4px;font-size:22px}.meta{color:var(--muted);margin:0 0 16px}
 .nums dt{font-size:11px;color:var(--muted)}.nums dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
 .out{margin:0;white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radius:10px;padding:12px;font:13px/1.55 ui-monospace,Consolas,monospace;flex:1}
 </style></head><body>
-<h1>เทียบ 3 หน้าต่าง: Claude Haiku แท้หรือปลอม</h1>
+<h1>เทียบ 3 หน้าต่าง: ลายนิ้วมือ tokenizer ของ Claude Haiku</h1>
 <p class="meta">${escapeHtml(startedAt.toLocaleString("th-TH"))}</p>
 <div class="prompt">${escapeHtml(prompt)}</div>
-<div class="ref">อ้างอิง tokenizer ของ prompt นี้ (หลังหักฐาน "Hello"): Claude ตัวจริง = <b>${ref.claudeDelta ?? "-"}</b> · Nemotron = <b>${ref.nemotronDelta ?? "-"}</b></div>
+<div class="ref">อ้างอิง tokenizer ของ prompt นี้ (หลังหักฐาน "Hello"): Claude อ้างอิง = <b>${ref.claudeDelta ?? "-"}</b> · Nemotron = <b>${ref.nemotronDelta ?? "-"}</b></div>
 <div class="grid">${cols}</div>
 </body></html>`;
 }
@@ -235,7 +235,7 @@ async function main() {
   console.log(`\n🔎 เทียบ 3 หน้าต่าง — ${startedAt.toLocaleString("th-TH")}`);
   console.log(`prompt:\n${prompt}\n`);
   if (!CFG.tenixeKey) console.log("⚠️  ไม่มี TENIXE_KEY — หน้าต่าง 1 จะว่าง");
-  if (!anthropic) console.log("⚠️  ไม่มี ANTHROPIC_API_KEY — ไม่มีตัวอ้างอิง tokenizer ของ Claude ตัวจริง");
+  if (!anthropic) console.log("⚠️  ไม่มี ANTHROPIC_API_KEY — ไม่มีตัวอ้างอิง tokenizer ของ Claude อ้างอิง");
   if (!CFG.kobKey) console.log("⚠️  ไม่มี REF_OPENAI_KEY (Token Key ของ Kob AI) — หน้าต่าง 3 จะว่าง");
   console.log("กำลังส่งไป 3 ที่พร้อมกัน… (Tenixe อาจต้องรอคิวสักครู่)");
 
@@ -266,7 +266,7 @@ async function main() {
         return { ...main, baseTokens: base.promptTokens };
       })()
       : Promise.reject(new Error("ยังไม่ได้ใส่ REF_OPENAI_KEY (Token Key ของ Kob AI) ใน .env")),
-    // ตัวอ้างอิงฝั่งปลอม: tokenizer ของ Nemotron (Tenixe ฟรี) — ไม่ได้แสดงเป็นหน้าต่าง
+    // ตัวเทียบที่สอง: tokenizer ของ Nemotron (Tenixe ฟรี) — ไม่ได้แสดงเป็นหน้าต่าง
     nemotron: CFG.tenixeKey
       ? Promise.all([tenixeChat(CFG.nemotron, prompt, 1), tenixeChat(CFG.nemotron, BASELINE, 1)])
       : Promise.reject(new Error("no tenixe")),
@@ -284,8 +284,8 @@ async function main() {
   if (Number.isNaN(ref.nemotronDelta)) ref.nemotronDelta = null;
 
   const defs = [
-    { key: "tenixe", title: `Tenixe · ${CFG.suspect}`, sub: `${CFG.tenixeUrl} (ผู้ต้องสงสัย)` },
-    { key: "anthropic", title: `Anthropic · ${CFG.anthropicModel}`, sub: "api.anthropic.com (ของแท้ — ตัวอ้างอิง)" },
+    { key: "tenixe", title: `Tenixe · ${CFG.suspect}`, sub: `${CFG.tenixeUrl} (ตัวที่ตรวจ)` },
+    { key: "anthropic", title: `Anthropic · ${CFG.anthropicModel}`, sub: "api.anthropic.com (ค่าอ้างอิง)" },
     { key: "kob", title: `Kob AI · ${CFG.kobModel}`, sub: `${CFG.kobBase} (ของเรา)` },
   ];
   const windows = defs.map((d) => {
@@ -300,7 +300,7 @@ async function main() {
   });
 
   windows.forEach((w, i) => printWindow(["①", "②", "③"][i], w));
-  console.log(`\nอ้างอิง tokenizer ของ prompt นี้ (หลังหักฐาน): Claude ตัวจริง = ${ref.claudeDelta ?? "-"} · Nemotron = ${ref.nemotronDelta ?? "-"}`);
+  console.log(`\nอ้างอิง tokenizer ของ prompt นี้ (หลังหักฐาน): Claude อ้างอิง = ${ref.claudeDelta ?? "-"} · Nemotron = ${ref.nemotronDelta ?? "-"}`);
   if (ref.claudeDelta != null && ref.claudeDelta === ref.nemotronDelta) {
     console.log("⚠️  prompt นี้ Claude กับ Nemotron นับได้เท่ากันพอดี — แยกไม่ออก ลองใช้ prompt ที่ยาวขึ้น/มีภาษาไทยหรือ emoji มากขึ้น");
   }

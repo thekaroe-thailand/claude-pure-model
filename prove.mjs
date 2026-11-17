@@ -1,14 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════
-   Pure_Haiku — ตรวจว่า "claude-haiku-5-5" ของ Tenixe เป็น Claude จริงไหม
+   Pure_Haiku — เทียบลายนิ้วมือ tokenizer ของ "claude-haiku-5-5" (Tenixe) กับค่าอ้างอิง Claude
 
    หลักการ (ไม่ต้องเชื่อคำตอบของโมเดล):
    ทุกตระกูลโมเดลมี tokenizer ของตัวเอง — ข้อความเดียวกันถูกนับเป็นจำนวน token ต่างกัน
    ส่งข้อความชุดเดียวกัน (อังกฤษ/ไทย/โค้ด/emoji/จีน/JSON …) ไปที่
-     1) ผู้ต้องสงสัย      : Tenixe "claude-haiku-5-5"
-     2) ตัวเทียบ          : Tenixe "nemotron-3.5-super-vl" (สงสัยว่าเป็นตัวจริงเบื้องหลัง)
-     3) Claude ตัวจริง    : Anthropic API (count_tokens) และ/หรือ gateway ที่ส่งไป Anthropic
+     1) ตัวที่ตรวจ      : Tenixe "claude-haiku-5-5"
+     2) ตัวเทียบ          : Tenixe "nemotron-3.5-super-vl"
+     3) Claude อ้างอิง    : Anthropic API (count_tokens) และ/หรือ gateway ที่ส่งไป Anthropic
    แล้วเทียบ "ส่วนต่าง" ของจำนวน token เทียบกับข้อความฐาน — ตัด token ที่ระบบแอบเติม (system/wrapper) ออก
-   ผู้ต้องสงสัยตรงกับใครทุกข้อ = ใช้ tokenizer เดียวกับตัวนั้น
+   ตัวที่ตรวจตรงกับใครทุกข้อ = ใช้ tokenizer เดียวกับตัวนั้น
 
    รัน:  npm run prove     (ใส่ key ใน .env ก่อน)
    ผล:   แสดงบนจอ + บันทึกที่ results/report-<เวลา>.md และ .json (ไม่มี key อยู่ในไฟล์ผล)
@@ -111,7 +111,7 @@ async function tenixeChat(model, content, maxTokens) {
   throw new Error(`Tenixe ${model}: ลองครบ 4 ครั้งแล้วยังไม่สำเร็จ (upstream ไม่ว่าง)`);
 }
 
-/* ═══════════════ Claude ตัวจริง ═══════════════ */
+/* ═══════════════ Claude อ้างอิง ═══════════════ */
 const anthropic = CFG.anthropicKey ? new Anthropic({ apiKey: CFG.anthropicKey }) : null;
 
 function explainAnthropicError(e) {
@@ -173,15 +173,15 @@ async function main() {
     process.exit(1);
   }
   const refs = [];
-  if (anthropic) refs.push({ id: "anthropic", label: `Claude จริง (Anthropic API · ${CFG.anthropicModel})` });
-  if (CFG.refBase && CFG.refKey && CFG.refModel) refs.push({ id: "ref", label: `Claude จริง (ผ่าน gateway · ${CFG.refModel})` });
+  if (anthropic) refs.push({ id: "anthropic", label: `Claude อ้างอิง (Anthropic API · ${CFG.anthropicModel})` });
+  if (CFG.refBase && CFG.refKey && CFG.refModel) refs.push({ id: "ref", label: `Claude อ้างอิง (ผ่าน gateway · ${CFG.refModel})` });
   if (refs.length === 0) {
-    log("⚠️  ไม่ได้ใส่ตัวอ้างอิง Claude ตัวจริง (ANTHROPIC_API_KEY หรือ REF_OPENAI_*) — จะเทียบได้แค่กับ Nemotron");
+    log("⚠️  ไม่ได้ใส่ตัวอ้างอิง Claude อ้างอิง (ANTHROPIC_API_KEY หรือ REF_OPENAI_*) — จะเทียบได้แค่กับ Nemotron");
   }
 
   const startedAt = new Date();
   log(`\n🔎 Pure_Haiku — เริ่มตรวจ ${startedAt.toLocaleString("th-TH")}`);
-  log(`   ผู้ต้องสงสัย : Tenixe ${CFG.suspect}`);
+  log(`   ตัวที่ตรวจ : Tenixe ${CFG.suspect}`);
   log(`   ตัวเทียบ     : Tenixe ${CFG.compare}`);
   for (const r of refs) log(`   อ้างอิง      : ${r.label}`);
 
@@ -211,7 +211,7 @@ async function main() {
         process.exit(2);
       }
     }
-    log(`   ${String(i).padStart(2)}. ${t.name.padEnd(16)} ผู้ต้องสงสัย=${String(counts.suspect[i]).padStart(4)}  ${CFG.compare}=${String(counts.compare[i]).padStart(4)}` +
+    log(`   ${String(i).padStart(2)}. ${t.name.padEnd(16)} ตัวที่ตรวจ=${String(counts.suspect[i]).padStart(4)}  ${CFG.compare}=${String(counts.compare[i]).padStart(4)}` +
       refs.map((r) => `  ${r.id === "anthropic" ? "Claude(API)" : "Claude(gw)"}=${String(counts[r.id][i]).padStart(4)}`).join(""));
   }
 
@@ -221,7 +221,7 @@ async function main() {
   const vsRefs = refs.map((r) => ({ ...r, ...compareDeltas(d.suspect, d[r.id]), refVsCompare: compareDeltas(d[r.id], d.compare) }));
 
   log(`\n② ส่วนต่างจากข้อความฐาน (ตัด token ที่ระบบเติมออก)`);
-  log(`   ${"ข้อความ".padEnd(16)} ${"ผู้ต้องสงสัย".padStart(12)} ${"Nemotron".padStart(9)}` + refs.map((r) => (r.id === "anthropic" ? "  Claude(API)" : "   Claude(gw)")).join(""));
+  log(`   ${"ข้อความ".padEnd(16)} ${"ตัวที่ตรวจ".padStart(12)} ${"Nemotron".padStart(9)}` + refs.map((r) => (r.id === "anthropic" ? "  Claude(API)" : "   Claude(gw)")).join(""));
   for (let i = 1; i < TEXTS.length; i++) {
     log(`   ${TEXTS[i].name.padEnd(16)} ${String(d.suspect[i]).padStart(12)} ${String(d.compare[i]).padStart(9)}` + refs.map((r) => String(d[r.id][i]).padStart(13)).join(""));
   }
@@ -241,7 +241,7 @@ async function main() {
     identity.push(row);
     log(`   ถาม: ${q}`);
     log(`     Tenixe ${CFG.suspect}: ${row.suspect.replace(/\s+/g, " ").slice(0, 200)}`);
-    if (row.reference !== undefined) log(`     Claude ตัวจริง     : ${row.reference.replace(/\s+/g, " ").slice(0, 200)}`);
+    if (row.reference !== undefined) log(`     Claude อ้างอิง     : ${row.reference.replace(/\s+/g, " ").slice(0, 200)}`);
   }
 
   const spend1 = await tenixeSpend();
@@ -249,26 +249,26 @@ async function main() {
   /* ── ตัดสิน ── */
   const lines = [];
   const pct = (x) => (x.total ? Math.round((x.match / x.total) * 100) : 0);
-  lines.push(`ผู้ต้องสงสัย vs ${CFG.compare}: ตรงกัน ${vsCompare.match}/${vsCompare.total} ข้อ (${pct(vsCompare)}%)`);
-  for (const r of vsRefs) lines.push(`ผู้ต้องสงสัย vs ${r.label}: ตรงกัน ${r.match}/${r.total} ข้อ (${pct(r)}%)`);
+  lines.push(`ตัวที่ตรวจ vs ${CFG.compare}: ตรงกัน ${vsCompare.match}/${vsCompare.total} ข้อ (${pct(vsCompare)}%)`);
+  for (const r of vsRefs) lines.push(`ตัวที่ตรวจ vs ${r.label}: ตรงกัน ${r.match}/${r.total} ข้อ (${pct(r)}%)`);
 
   let verdict;
   const refOk = vsRefs.filter((r) => r.total >= 5);
   if (refOk.length === 0) {
     verdict = vsCompare.total && vsCompare.match === vsCompare.total
-      ? `⚠️ ยังสรุปไม่ได้ 100%: tokenizer ของ "${CFG.suspect}" ตรงกับ ${CFG.compare} ทุกข้อ แต่ยังไม่มีตัวอ้างอิง Claude ตัวจริงให้เทียบ — ใส่ ANTHROPIC_API_KEY หรือ REF_OPENAI_* แล้วรันใหม่`
-      : `⚠️ ยังสรุปไม่ได้: ไม่มีตัวอ้างอิง Claude ตัวจริง และไม่ตรงกับ ${CFG.compare} ทุกข้อ`;
+      ? `⚠️ ยังสรุปไม่ได้ 100%: tokenizer ของ "${CFG.suspect}" ตรงกับ ${CFG.compare} ทุกข้อ แต่ยังไม่มีตัวอ้างอิง Claude อ้างอิงให้เทียบ — ใส่ ANTHROPIC_API_KEY หรือ REF_OPENAI_* แล้วรันใหม่`
+      : `⚠️ ยังสรุปไม่ได้: ไม่มีตัวอ้างอิง Claude อ้างอิง และไม่ตรงกับ ${CFG.compare} ทุกข้อ`;
   } else if (refOk.every((r) => r.match === r.total)) {
-    verdict = `✅ น่าจะเป็น Claude จริง: tokenizer ของ "${CFG.suspect}" ตรงกับ Claude ตัวจริงทุกข้อ`;
+    verdict = `✅ ตรงกับ Claude: tokenizer ของ "${CFG.suspect}" ตรงกับ Claude อ้างอิงทุกข้อ`;
   } else if (vsCompare.total && vsCompare.match === vsCompare.total && refOk.every((r) => r.match < r.total / 2)) {
-    verdict = `❌ ไม่ใช่ Claude: tokenizer ของ "${CFG.suspect}" ตรงกับ ${CFG.compare} ทุกข้อ (${vsCompare.match}/${vsCompare.total}) แต่ไม่ตรงกับ Claude ตัวจริง`;
+    verdict = `❌ ไม่ตรงกับ Claude: tokenizer ของ "${CFG.suspect}" ตรงกับ ${CFG.compare} ทุกข้อ (${vsCompare.match}/${vsCompare.total}) แต่ไม่ตรงกับ Claude อ้างอิง`;
   } else {
-    verdict = `⚠️ ผลก้ำกึ่ง — ดูตารางส่วนต่างประกอบ`;
+    verdict = `⚠️ ไม่แน่ใจ — ดูตารางส่วนต่างประกอบ`;
   }
-  // ถ้าตัวอ้างอิง "Claude ตัวจริง" ดันตรงกับ Nemotron ทุกข้อ แปลว่าตัวอ้างอิงเองก็ไม่น่าเชื่อ
+  // ถ้าตัวอ้างอิง "Claude อ้างอิง" ดันตรงกับ Nemotron ทุกข้อ แปลว่าตัวอ้างอิงเองก็ไม่น่าเชื่อ
   for (const r of refOk) {
     if (r.refVsCompare.total && r.refVsCompare.match === r.refVsCompare.total) {
-      verdict += `\n⚠️ ระวัง: ตัวอ้างอิง ${r.label} ก็ตรงกับ ${CFG.compare} ทุกข้อ — ตัวอ้างอิงเองอาจไม่ใช่ Claude`;
+      verdict += `\n⚠️ ระวัง: ตัวอ้างอิง ${r.label} ก็ตรงกับ ${CFG.compare} ทุกข้อ — ตัวอ้างอิงเองอาจไม่ถูกต้อง`;
     }
   }
 
@@ -299,7 +299,7 @@ async function main() {
     `# ผลตรวจ ${CFG.suspect} ของ Tenixe`,
     ``,
     `- เวลา: ${startedAt.toLocaleString("th-TH")}`,
-    `- ผู้ต้องสงสัย: Tenixe \`${CFG.suspect}\``,
+    `- ตัวที่ตรวจ: Tenixe \`${CFG.suspect}\``,
     `- ตัวเทียบ: Tenixe \`${CFG.compare}\``,
     ...refs.map((r) => `- อ้างอิง: ${r.label}`),
     ``,
@@ -311,13 +311,13 @@ async function main() {
     ``,
     `## จำนวน token (prompt) ของแต่ละข้อความ`,
     ``,
-    `| ข้อความ | ผู้ต้องสงสัย | ${CFG.compare} | ${refs.map((r) => r.label).join(" | ")} |`,
+    `| ข้อความ | ตัวที่ตรวจ | ${CFG.compare} | ${refs.map((r) => r.label).join(" | ")} |`,
     `|---|---|---|${refs.map(() => "---|").join("")}`,
     ...TEXTS.map((t, i) => `| ${t.name} | ${counts.suspect[i]} | ${counts.compare[i]} | ${refs.map((r) => counts[r.id][i]).join(" | ")} |`),
     ``,
     `## ส่วนต่างจากข้อความฐาน (ใช้ตัดสิน)`,
     ``,
-    `| ข้อความ | ผู้ต้องสงสัย | ${CFG.compare} | ${refs.map((r) => r.label).join(" | ")} |`,
+    `| ข้อความ | ตัวที่ตรวจ | ${CFG.compare} | ${refs.map((r) => r.label).join(" | ")} |`,
     `|---|---|---|${refs.map(() => "---|").join("")}`,
     ...TEXTS.slice(1).map((t, j) => `| ${t.name} | ${d.suspect[j + 1]} | ${d.compare[j + 1]} | ${refs.map((r) => d[r.id][j + 1]).join(" | ")} |`),
     ``,
@@ -327,14 +327,14 @@ async function main() {
       `**ถาม:** ${r.question}`,
       ``,
       `- Tenixe \`${CFG.suspect}\`: ${r.suspect.replace(/\s+/g, " ")}`,
-      ...(r.reference !== undefined ? [`- Claude ตัวจริง: ${r.reference.replace(/\s+/g, " ")}`] : []),
+      ...(r.reference !== undefined ? [`- Claude อ้างอิง: ${r.reference.replace(/\s+/g, " ")}`] : []),
       ``,
     ]),
     `## วิธีอ่านผล`,
     ``,
     `แต่ละตระกูลโมเดลมี tokenizer ของตัวเอง ข้อความเดียวกันจึงถูกนับเป็นจำนวน token ต่างกัน`,
     `ใช้ "ส่วนต่างจากข้อความฐาน" แทนตัวเลขดิบ เพื่อตัด token ที่ระบบแต่ละเจ้าเติมเอง (system prompt / wrapper) ออก`,
-    `ถ้าส่วนต่างของผู้ต้องสงสัยตรงกับโมเดลไหนทุกข้อ แปลว่าใช้ tokenizer เดียวกับโมเดลนั้น`,
+    `ถ้าส่วนต่างของตัวที่ตรวจตรงกับโมเดลไหนทุกข้อ แปลว่าใช้ tokenizer เดียวกับโมเดลนั้น`,
   ].join("\n");
   const mdPath = path.join(outDir, `report-${stamp}.md`);
   fs.writeFileSync(mdPath, md);
