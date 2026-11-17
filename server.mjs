@@ -30,7 +30,7 @@ async function runCheck(who, p, prompt, send) {
   const spend0 = usesTenixe ? await tenixeSpend() : null;
 
   // ลายนิ้วมืออ้างอิงเริ่มวัดคู่ขนานไปเลย (cache ต่อ prompt)
-  const refJob = getReference(prompt);
+  const refJob = getReference(prompt, p.refModel ?? null);
 
   step("ask", "run", `ส่งคำถามไปที่ ${p.name}`, "รอคำตอบ…");
   const t0 = Date.now();
@@ -47,10 +47,10 @@ async function runCheck(who, p, prompt, send) {
 
   step("ref", "run", "ดึงลายนิ้วมืออ้างอิง", "Claude อ้างอิง (count_tokens) + Nemotron");
   const ref = await refJob;
-  const refFail = [ref.claudeError && `Claude: ${ref.claudeError}`, ref.nemotronError && `Nemotron: ${ref.nemotronError}`].filter(Boolean).join(" · ");
+  const refFail = [ref.claudeError && `Claude: ${ref.claudeError}`, ref.nemotronError && `Nemotron: ${ref.nemotronError}`, ref.claudeNote].filter(Boolean).join(" · ");
   step("ref", refFail ? "warn" : "done", "ดึงลายนิ้วมืออ้างอิง",
-    refFail || `Claude อ้างอิง ${ref.claudeDelta ?? "-"} · Nemotron ${ref.nemotronDelta ?? "-"}`);
-  send({ type: "ref", claudeDelta: ref.claudeDelta, nemotronDelta: ref.nemotronDelta });
+    refFail || `Claude อ้างอิง (${ref.claudeModel}) ${ref.claudeDelta ?? "-"} · Nemotron ${ref.nemotronDelta ?? "-"}`);
+  send({ type: "ref", claudeDelta: ref.claudeDelta, claudeModel: ref.claudeModel, isDefaultModel: ref.isDefaultModel, nemotronDelta: ref.nemotronDelta });
 
   step("judge", "run", "เทียบลายนิ้วมือ แล้วตัดสิน", "");
   const verdict = judge({ delta, text: answer.text }, ref);

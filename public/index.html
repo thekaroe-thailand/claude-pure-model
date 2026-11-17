@@ -122,7 +122,8 @@ textarea[readonly]{resize:none}
 .card[data-who=custom]{--accent:var(--custom)}
 .card[data-who=custom] .go{color:#06201c}
 .card[data-who=custom] .go.again{color:var(--muted)}
-.head > div:nth-child(2){min-width:0} .head h2{overflow-wrap:anywhere}
+.head > div:nth-child(2){min-width:0}
+.card[data-who=custom] .head h2,.card[data-who=custom] .head .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .mrow button{background:var(--panel2);border:1px solid var(--line);color:var(--custom);border-radius:8px;font-size:12px;padding:4px 10px}
 .mrow button:disabled{opacity:.5;cursor:wait}
@@ -136,7 +137,7 @@ textarea[readonly]{resize:none}
 .grid.four .head h2{font-size:18px}
 @media (max-width:1100px){.grid.four{grid-template-columns:1fr}}
 .head .tools{margin-left:auto;display:flex;gap:6px;align-self:flex-start}
-.head .tools button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:8px;font-size:12px;padding:3px 9px}
+.head .tools button{white-space:nowrap;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:8px;font-size:12px;padding:3px 9px}
 .head .tools button[hidden]{display:none}
 .form{display:flex;flex-direction:column;gap:7px}
 .form[hidden]{display:none}
@@ -224,7 +225,7 @@ textarea[readonly]{resize:none}
       <div class="delta"><dt>ส่วนต่าง</dt><dd data-k="delta">-</dd></div>
     </dl>
     <div class="match" hidden>
-      <div class="chip c">ตรง Claude อ้างอิง? <b data-k="c">-</b></div>
+      <div class="chip c"><span class="lbl">ตรง Claude อ้างอิง?</span> <b data-k="c">-</b></div>
       <div class="chip n">ตรง Nemotron? <b data-k="n">-</b></div>
     </div>
     <div class="verdict" hidden><div class="big"></div><div><strong></strong><span></span></div></div>
@@ -305,14 +306,22 @@ function buildCard(who, p, i) {
   cards[who] = el;
 }
 
-/* ── การ์ดเจ้าอื่น: กรอก URL / key / model เอง ── */
-const LS_KEY = "pureHaiku.custom"; // จำเฉพาะ URL/model/รูปแบบ/ชื่อ — ไม่จำ key
+/* ── การ์ดเจ้าอื่น: กรอก URL / key / model เอง (เพิ่มได้หลายใบ) ── */
+const LS_KEY = "pureHaiku.custom"; // จำเฉพาะ URL/model/รูปแบบ/ชื่อ ของแต่ละใบ — ไม่จำ key
 const store = {
-  get() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } },
+  get() {
+    try {
+      const v = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+      return Array.isArray(v) ? v : v && typeof v === "object" ? [v] : []; // รุ่นเก่าเก็บเป็น object เดียว
+    } catch { return []; }
+  },
   set(v) { try { localStorage.setItem(LS_KEY, JSON.stringify(v)); } catch {} },
 };
-function customValues() {
-  const el = cards.custom;
+let customSeq = 0;
+const kindOf = (id) => cards[id]?.dataset.who ?? id;
+const customIds = () => Object.keys(cards).filter((id) => kindOf(id) === "custom");
+
+function customValues(el) {
   return {
     format: $(".f-fmt", el).value,
     url: $(".f-url", el).value.trim(),
@@ -321,65 +330,72 @@ function customValues() {
     name: $(".f-name", el).value.trim(),
   };
 }
+const hostOf = (s) => { try { return new URL(s).host; } catch { return ""; } };
 function customLabel(v) {
-  let host = "";
-  try { host = new URL(v.url).host; } catch {}
-  return { name: v.name || host || "เจ้าอื่น", sub: [v.model, host].filter(Boolean).join(" · ") || "กรอก URL, key และ model" };
+  const host = hostOf(v.url);
+  const name = (v.name && (hostOf(v.name) || v.name)) || host || "เจ้าอื่น"; // ใส่ URL เป็นชื่อ → แสดงแค่ host
+  return { name, sub: [v.model, host].filter(Boolean).join(" · ") || "กรอก URL, key และ model" };
 }
-function refreshCustom() {
-  const el = cards.custom; if (!el) return;
-  const v = customValues(), l = customLabel(v);
-  $("h2", el).textContent = l.name;
-  $(".sub", el).textContent = l.sub;
-  if (!runningSet.has("custom")) $(".go", el).disabled = !(v.url && v.model);
-  store.set({ format: v.format, url: v.url, model: v.model, name: v.name });
+function saveCustoms() {
+  store.set(customIds().map((id) => { const { format, url, model, name } = customValues(cards[id]); return { format, url, model, name }; }));
 }
-function showCustomForm(show) {
-  const el = cards.custom;
+function refreshCustom(el) {
+  const v = customValues(el), l = customLabel(v);
+  $("h2", el).textContent = l.name; $("h2", el).title = l.name;
+  $(".sub", el).textContent = l.sub; $(".sub", el).title = l.sub;
+  if (!runningSet.has(el.dataset.id)) $(".go", el).disabled = !(v.url && v.model);
+}
+function showCustomForm(el, show) {
   $(".form", el).hidden = !show;
   $(".t-edit", el).hidden = show;
 }
+function layoutGrid() {
+  const ids = Object.keys(cards);
+  ids.forEach((id, i) => ($(".num", cards[id]).textContent = i + 1));
+  $("#grid").classList.toggle("four", ids.length > 3);
+}
 function buildCustomCard() {
-  if (cards.custom) { cards.custom.hidden = false; $("#grid").classList.add("four"); return; }
+  const id = `c${++customSeq}`;
+  const saved = store.get()[customIds().length] ?? {}; // เติมค่าที่เคยกรอกไว้ของใบลำดับเดียวกัน
   const el = $("#tpl").content.firstElementChild.cloneNode(true);
-  el.dataset.who = "custom";
-  $(".num", el).textContent = ORDER.length + 1;
+  el.dataset.who = "custom"; el.dataset.id = id;
   const tools = document.createElement("div");
   tools.className = "tools";
-  tools.innerHTML = `<button class="t-edit" type="button" hidden>แก้ค่า</button><button class="t-close" type="button" title="ซ่อน">✕</button>`;
+  tools.innerHTML = `<button class="t-edit" type="button" hidden>แก้ค่า</button><button class="t-close" type="button" title="ลบการ์ดนี้">✕</button>`;
   $(".head", el).append(tools);
   $(".head", el).after($("#tplForm").content.firstElementChild.cloneNode(true));
-  const saved = store.get();
   if (saved.format) $(".f-fmt", el).value = saved.format;
   $(".f-url", el).value = saved.url || "";
   $(".f-model", el).value = saved.model || "";
   $(".f-name", el).value = saved.name || "";
   const btn = $(".go", el);
   btn.textContent = BTN.custom;
-  btn.addEventListener("click", () => run("custom"));
-  $(".form", el).addEventListener("input", refreshCustom);
+  btn.addEventListener("click", () => run(id));
+  $(".form", el).addEventListener("input", () => { refreshCustom(el); saveCustoms(); });
   $(".f-list", el).addEventListener("click", () => fetchModels(el));
   $(".f-pick", el).addEventListener("change", (e) => {
     if (!e.target.value) return;
     $(".f-model", el).value = e.target.value;
-    refreshCustom();
+    refreshCustom(el); saveCustoms();
   });
-  $(".t-edit", el).addEventListener("click", () => showCustomForm(true));
+  $(".t-edit", el).addEventListener("click", () => showCustomForm(el, true));
   $(".t-close", el).addEventListener("click", () => {
-    if (runningSet.has("custom")) return;
-    el.hidden = true; $("#grid").classList.remove("four");
+    if (runningSet.has(id)) return;
+    el.remove(); delete cards[id];
+    saveCustoms(); layoutGrid();
   });
   $("#grid").append(el);
-  $("#grid").classList.add("four");
-  cards.custom = el;
-  refreshCustom();
-  (saved.url ? $(".f-key", el) : $(".f-url", el)).focus();
+  cards[id] = el;
+  layoutGrid();
+  refreshCustom(el);
+  el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  (saved.url ? $(".f-key", el) : $(".f-url", el)).focus({ preventScroll: true });
 }
 $("#addCustom").addEventListener("click", buildCustomCard);
 
 /** ถาม endpoint ว่ามี model อะไรบ้าง (GET /models) แล้วให้เลือกจากรายการ */
 async function fetchModels(el) {
-  const v = customValues(), btn = $(".f-list", el), msg = $(".f-msg", el), pick = $(".f-pick", el);
+  const v = customValues(el), btn = $(".f-list", el), msg = $(".f-msg", el), pick = $(".f-pick", el);
   msg.classList.remove("bad");
   if (!v.url) { msg.classList.add("bad"); msg.textContent = "กรอก URL ก่อน"; return; }
   btn.disabled = true; msg.textContent = "กำลังดึงรายชื่อ…";
@@ -418,7 +434,7 @@ function clearCard(el) {
   $(".timer", el).textContent = "";
 }
 
-const STEPS = [["ask", "1 ถามโมเดล"], ["base", "2 นับฐาน"], ["ref", "3 อ้างอิง"], ["judge", "4 ตัดสิน"]];
+const STEPS = [["ask", "1 ถาม"], ["base", "2 ฐาน"], ["ref", "3 อ้างอิง"], ["judge", "4 ตัดสิน"]];
 function initSteps(el) {
   $(".steps", el).innerHTML = STEPS.map(([id, label]) => `<li data-id="${id}"><div class="ic"></div><span>${label}</span></li>`).join("");
 }
@@ -433,19 +449,20 @@ function setStep(el, ev) {
 /* ── ตรวจ 1 เจ้า ── */
 async function run(who) {
   if (runningSet.has(who)) return;
+  const kind = kindOf(who);
   const el = cards[who], btn = $(".go", el);
   const payload = { prompt: $("#prompt").value };
-  if (who === "custom") {
-    payload.custom = customValues();
+  if (kind === "custom") {
+    payload.custom = customValues(el);
     if (!payload.custom.url || !payload.custom.model) { $(".err", el).textContent = "❌ กรุณากรอก URL และ model"; return; }
-    showCustomForm(false);
+    showCustomForm(el, false);
   }
   runningSet.add(who);
   usedPrompt = true; lockPrompt(true);
   clearCard(el);
   initSteps(el);
   el.classList.add("running");
-  btn.disabled = true; btn.classList.remove("again"); btn.classList.add("slim"); btn.textContent = `กำลัง${BTN[who]}…`;
+  btn.disabled = true; btn.classList.remove("again"); btn.classList.add("slim"); btn.textContent = `กำลัง${BTN[kind]}…`;
 
   const t0 = performance.now();
   const timer = setInterval(() => { $(".timer", el).textContent = `⏱ ${((performance.now() - t0) / 1000).toFixed(1)} วิ`; }, 100);
@@ -458,7 +475,7 @@ async function run(who) {
   // อ่าน stream จาก server
   (async () => {
     try {
-      const res = await fetch(`/api/check/${who}`, {
+      const res = await fetch(`/api/check/${kind}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -492,8 +509,10 @@ async function run(who) {
     }
     else if (ev.type === "ref") {
       Object.assign(state, ev);
-      await showRef(ev.claudeDelta, ev.nemotronDelta);
+      await showRef(ev.isDefaultModel === false ? null : ev.claudeDelta, ev.nemotronDelta);
       const m = $(".match", el); m.hidden = false;
+      $(".chip.c .lbl", m).textContent = ev.isDefaultModel === false ? `ตรง ${ev.claudeModel}?` : "ตรง Claude อ้างอิง?";
+      $(".chip.c", m).title = `ค่าอ้างอิงจาก count_tokens ของ ${ev.claudeModel ?? "-"}`;
       $('[data-k="c"]', m).textContent = ev.claudeDelta ?? "-";
       $('[data-k="n"]', m).textContent = ev.nemotronDelta ?? "-";
     }
@@ -525,14 +544,14 @@ async function run(who) {
       $(".steps li.run", el)?.classList.replace("run", "fail");
       $(".verdict", el).hidden = true;
       el.classList.remove("running");
-      if (who === "custom") showCustomForm(true); // เปิดฟอร์มให้แก้ค่าต่อได้เลย
+      if (kind === "custom") showCustomForm(el, true); // เปิดฟอร์มให้แก้ค่าต่อได้เลย
     }
   }
 
   clearInterval(timer);
   $(".timer", el).textContent = `⏱ รวม ${((performance.now() - t0) / 1000).toFixed(1)} วิ`;
   el.classList.remove("running");
-  btn.disabled = false; btn.classList.add("again"); btn.textContent = `↻ ${BTN[who]} อีกครั้ง`;
+  btn.disabled = false; btn.classList.add("again"); btn.textContent = `↻ ${BTN[kind]} อีกครั้ง`;
   runningSet.delete(who);
 }
 
@@ -554,10 +573,10 @@ function resetAll() {
   for (const who of Object.keys(cards)) {
     clearCard(cards[who]);
     const btn = $(".go", cards[who]);
-    btn.classList.remove("again", "slim"); btn.textContent = BTN[who];
+    btn.classList.remove("again", "slim"); btn.textContent = BTN[kindOf(who)];
     btn.disabled = !!$(".missing", cards[who]).textContent;
   }
-  if (cards.custom) { showCustomForm(true); refreshCustom(); }
+  for (const id of customIds()) { showCustomForm(cards[id], true); refreshCustom(cards[id]); }
   resetRef(); usedPrompt = false;
 }
 $("#reset").addEventListener("click", resetAll);
