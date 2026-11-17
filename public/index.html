@@ -64,7 +64,8 @@ textarea[readonly]{resize:none}
 /* steps (stepper แนวนอน) */
 .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .steps:empty{display:none}
-.steps li{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--faint);background:var(--bg);border-radius:9px;padding:5px 8px;white-space:nowrap;overflow:hidden}
+.steps li{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--faint);background:var(--bg);border-radius:9px;padding:5px 8px;white-space:nowrap;overflow:hidden;min-width:0}
+.steps li span{overflow:hidden;text-overflow:ellipsis}
 .steps .ic{flex:none;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:700;border:2px solid var(--line)}
 .steps .run{color:var(--text);outline:1px solid var(--accent)}
 .steps .run .ic{border-top-color:var(--accent);animation:spin .8s linear infinite}
@@ -111,13 +112,43 @@ textarea[readonly]{resize:none}
 .verdict.reveal{animation:stamp .5s cubic-bezier(.2,1.6,.4,1)}
 .reasons{margin:-4px 0 0;padding-left:18px;font-size:12px;line-height:1.5;color:var(--muted)}
 .reasons:empty{display:none}
-.err{border-radius:12px;padding:10px 12px;background:var(--bad-bg);color:var(--bad);font-size:14px}
+.err{border-radius:12px;padding:10px 12px;background:var(--bad-bg);color:var(--bad);font-size:13.5px;overflow-wrap:anywhere}
 .err:empty{display:none}
 .spend{font-size:12px;color:var(--faint);margin-top:-6px}
 .spend:empty{display:none}
 
-.foot{margin-top:12px;display:flex;justify-content:space-between;align-items:center;color:var(--faint);font-size:12.5px}
+/* ── การ์ดเจ้าอื่น (กรอกเอง) ── */
+:root{--custom:#2dd4bf}
+.card[data-who=custom]{--accent:var(--custom)}
+.card[data-who=custom] .go{color:#06201c}
+.card[data-who=custom] .go.again{color:var(--muted)}
+.head > div:nth-child(2){min-width:0} .head h2{overflow-wrap:anywhere}
+.mrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mrow button{background:var(--panel2);border:1px solid var(--line);color:var(--custom);border-radius:8px;font-size:12px;padding:4px 10px}
+.mrow button:disabled{opacity:.5;cursor:wait}
+.mrow .f-msg{font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+.mrow .f-msg.bad{color:var(--bad)}
+.form select.f-pick[hidden]{display:none}
+.grid.four{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.grid.four .card{padding:12px 13px}
+.grid.four .steps{gap:4px} .grid.four .steps li{font-size:11px;padding:5px 6px;gap:4px}
+.grid.four .chip{font-size:11.5px;padding:5px 8px} .grid.four .chip b{font-size:15px}
+.grid.four .head h2{font-size:18px}
+@media (max-width:1100px){.grid.four{grid-template-columns:1fr}}
+.head .tools{margin-left:auto;display:flex;gap:6px;align-self:flex-start}
+.head .tools button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:8px;font-size:12px;padding:3px 9px}
+.head .tools button[hidden]{display:none}
+.form{display:flex;flex-direction:column;gap:7px}
+.form[hidden]{display:none}
+.form label{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--muted)}
+.form input,.form select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--text);font:13px var(--mono);padding:7px 10px;outline:none}
+.form input:focus,.form select:focus{border-color:var(--accent)}
+.form .hint{margin:0;font-size:11.5px;color:var(--faint)}
+
+.foot{margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--faint);font-size:12.5px}
 .foot button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:8px 14px}
+.foot .acts{display:flex;gap:8px}
+.foot #addCustom{color:var(--custom);border-color:color-mix(in srgb,var(--custom) 45%,var(--line))}
 
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes blink{50%{opacity:0}}
@@ -154,9 +185,30 @@ textarea[readonly]{resize:none}
 <main class="grid" id="grid"></main>
 
 <footer class="foot">
-  <span>รันบนเครื่องนี้ (127.0.0.1) · key อยู่ฝั่งเซิร์ฟเวอร์เท่านั้น ไม่ถูกส่งมาที่หน้าเว็บ</span>
-  <button id="reset" type="button">ล้างผลทั้งหมด</button>
+  <span>รันบนเครื่องนี้ (127.0.0.1) · key ใน .env อยู่ฝั่งเซิร์ฟเวอร์เท่านั้น · key ที่กรอกเองไม่ถูกบันทึกที่ไหน</span>
+  <div class="acts">
+    <button id="addCustom" type="button">＋ ตรวจเจ้าอื่น</button>
+    <button id="reset" type="button">ล้างผลทั้งหมด</button>
+  </div>
 </footer>
+
+<template id="tplForm">
+  <div class="form">
+    <label>รูปแบบ API
+      <select class="f-fmt">
+        <option value="openai">OpenAI-compatible (/chat/completions)</option>
+        <option value="anthropic">Anthropic (/v1/messages)</option>
+      </select>
+    </label>
+    <label>URL <input class="f-url" type="url" placeholder="https://api.example.com/v1" spellcheck="false" autocomplete="off"></label>
+    <label>API key <input class="f-key" type="password" placeholder="sk-…" spellcheck="false" autocomplete="new-password"></label>
+    <label>Model <input class="f-model" placeholder="claude-haiku-5-5" spellcheck="false" autocomplete="off"></label>
+    <div class="mrow"><button class="f-list" type="button">ดึงรายชื่อ model</button><span class="f-msg"></span></div>
+    <select class="f-pick" hidden></select>
+    <label>ชื่อที่แสดง (ไม่บังคับ) <input class="f-name" placeholder="เช่น ผู้ให้บริการ X" autocomplete="off"></label>
+    <p class="hint">กรอกแค่ base URL หรือ path เต็มก็ได้ · key ใช้ครั้งเดียวตอนกดตรวจ ไม่บันทึก</p>
+  </div>
+</template>
 
 <template id="tpl">
   <section class="card">
@@ -184,7 +236,7 @@ textarea[readonly]{resize:none}
 
 <script>
 const ORDER = ["claude", "kob", "tenixe"];
-const BTN = { claude: "ตรวจสอบ Claude", kob: "ตรวจสอบ Kob AI", tenixe: "ตรวจสอบ Tenixe" };
+const BTN = { claude: "ตรวจสอบ Claude", kob: "ตรวจสอบ Kob AI", tenixe: "ตรวจสอบ Tenixe", custom: "ตรวจสอบเจ้าอื่น" };
 const $ = (s, r = document) => r.querySelector(s);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const cards = {};
@@ -253,6 +305,102 @@ function buildCard(who, p, i) {
   cards[who] = el;
 }
 
+/* ── การ์ดเจ้าอื่น: กรอก URL / key / model เอง ── */
+const LS_KEY = "pureHaiku.custom"; // จำเฉพาะ URL/model/รูปแบบ/ชื่อ — ไม่จำ key
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } },
+  set(v) { try { localStorage.setItem(LS_KEY, JSON.stringify(v)); } catch {} },
+};
+function customValues() {
+  const el = cards.custom;
+  return {
+    format: $(".f-fmt", el).value,
+    url: $(".f-url", el).value.trim(),
+    key: $(".f-key", el).value.trim(),
+    model: $(".f-model", el).value.trim(),
+    name: $(".f-name", el).value.trim(),
+  };
+}
+function customLabel(v) {
+  let host = "";
+  try { host = new URL(v.url).host; } catch {}
+  return { name: v.name || host || "เจ้าอื่น", sub: [v.model, host].filter(Boolean).join(" · ") || "กรอก URL, key และ model" };
+}
+function refreshCustom() {
+  const el = cards.custom; if (!el) return;
+  const v = customValues(), l = customLabel(v);
+  $("h2", el).textContent = l.name;
+  $(".sub", el).textContent = l.sub;
+  if (!runningSet.has("custom")) $(".go", el).disabled = !(v.url && v.model);
+  store.set({ format: v.format, url: v.url, model: v.model, name: v.name });
+}
+function showCustomForm(show) {
+  const el = cards.custom;
+  $(".form", el).hidden = !show;
+  $(".t-edit", el).hidden = show;
+}
+function buildCustomCard() {
+  if (cards.custom) { cards.custom.hidden = false; $("#grid").classList.add("four"); return; }
+  const el = $("#tpl").content.firstElementChild.cloneNode(true);
+  el.dataset.who = "custom";
+  $(".num", el).textContent = ORDER.length + 1;
+  const tools = document.createElement("div");
+  tools.className = "tools";
+  tools.innerHTML = `<button class="t-edit" type="button" hidden>แก้ค่า</button><button class="t-close" type="button" title="ซ่อน">✕</button>`;
+  $(".head", el).append(tools);
+  $(".head", el).after($("#tplForm").content.firstElementChild.cloneNode(true));
+  const saved = store.get();
+  if (saved.format) $(".f-fmt", el).value = saved.format;
+  $(".f-url", el).value = saved.url || "";
+  $(".f-model", el).value = saved.model || "";
+  $(".f-name", el).value = saved.name || "";
+  const btn = $(".go", el);
+  btn.textContent = BTN.custom;
+  btn.addEventListener("click", () => run("custom"));
+  $(".form", el).addEventListener("input", refreshCustom);
+  $(".f-list", el).addEventListener("click", () => fetchModels(el));
+  $(".f-pick", el).addEventListener("change", (e) => {
+    if (!e.target.value) return;
+    $(".f-model", el).value = e.target.value;
+    refreshCustom();
+  });
+  $(".t-edit", el).addEventListener("click", () => showCustomForm(true));
+  $(".t-close", el).addEventListener("click", () => {
+    if (runningSet.has("custom")) return;
+    el.hidden = true; $("#grid").classList.remove("four");
+  });
+  $("#grid").append(el);
+  $("#grid").classList.add("four");
+  cards.custom = el;
+  refreshCustom();
+  (saved.url ? $(".f-key", el) : $(".f-url", el)).focus();
+}
+$("#addCustom").addEventListener("click", buildCustomCard);
+
+/** ถาม endpoint ว่ามี model อะไรบ้าง (GET /models) แล้วให้เลือกจากรายการ */
+async function fetchModels(el) {
+  const v = customValues(), btn = $(".f-list", el), msg = $(".f-msg", el), pick = $(".f-pick", el);
+  msg.classList.remove("bad");
+  if (!v.url) { msg.classList.add("bad"); msg.textContent = "กรอก URL ก่อน"; return; }
+  btn.disabled = true; msg.textContent = "กำลังดึงรายชื่อ…";
+  try {
+    const res = await fetch("/api/models", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ custom: { format: v.format, url: v.url, key: v.key } }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    if (!d.models?.length) { msg.textContent = "endpoint นี้ไม่ส่งรายชื่อ model มา ต้องพิมพ์ชื่อเอง"; pick.hidden = true; return; }
+    pick.innerHTML = `<option value="">เลือก model (${d.models.length} ตัว)…</option>` +
+      d.models.map((m) => `<option>${m.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))}</option>`).join("");
+    pick.value = d.models.includes(v.model) ? v.model : "";
+    pick.hidden = false;
+    msg.textContent = d.models.includes(v.model) ? `✔ พบ "${v.model}" ในรายการ` : `พบ ${d.models.length} model · "${v.model || "-"}" ไม่อยู่ในรายการ`;
+  } catch (e) {
+    msg.classList.add("bad"); msg.textContent = e.message; pick.hidden = true;
+  } finally { btn.disabled = false; }
+}
+
 function clearCard(el) {
   el.className = "card";
   $(".steps", el).innerHTML = "";
@@ -270,7 +418,7 @@ function clearCard(el) {
   $(".timer", el).textContent = "";
 }
 
-const STEPS = [["ask", "1 ถามโมเดล"], ["base", "2 นับฐาน Hello"], ["ref", "3 ดึงอ้างอิง"], ["judge", "4 ตัดสิน"]];
+const STEPS = [["ask", "1 ถามโมเดล"], ["base", "2 นับฐาน"], ["ref", "3 อ้างอิง"], ["judge", "4 ตัดสิน"]];
 function initSteps(el) {
   $(".steps", el).innerHTML = STEPS.map(([id, label]) => `<li data-id="${id}"><div class="ic"></div><span>${label}</span></li>`).join("");
 }
@@ -286,6 +434,12 @@ function setStep(el, ev) {
 async function run(who) {
   if (runningSet.has(who)) return;
   const el = cards[who], btn = $(".go", el);
+  const payload = { prompt: $("#prompt").value };
+  if (who === "custom") {
+    payload.custom = customValues();
+    if (!payload.custom.url || !payload.custom.model) { $(".err", el).textContent = "❌ กรุณากรอก URL และ model"; return; }
+    showCustomForm(false);
+  }
   runningSet.add(who);
   usedPrompt = true; lockPrompt(true);
   clearCard(el);
@@ -306,9 +460,13 @@ async function run(who) {
     try {
       const res = await fetch(`/api/check/${who}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: $("#prompt").value }),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok || !res.body) { push({ type: "error", message: (await res.text()) || `HTTP ${res.status}` }); return; }
+      if (!res.ok || !res.body) {
+        const t = await res.text();
+        let msg = t; try { msg = JSON.parse(t).error ?? t; } catch {}
+        push({ type: "error", message: msg || `HTTP ${res.status}` }); return;
+      }
       const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
       for (;;) {
         const { value, done } = await reader.read();
@@ -367,6 +525,7 @@ async function run(who) {
       $(".steps li.run", el)?.classList.replace("run", "fail");
       $(".verdict", el).hidden = true;
       el.classList.remove("running");
+      if (who === "custom") showCustomForm(true); // เปิดฟอร์มให้แก้ค่าต่อได้เลย
     }
   }
 
@@ -392,12 +551,13 @@ $("#edit").addEventListener("click", () => {
 function confirmReset() { resetAll(); return true; }
 function resetAll() {
   if (runningSet.size) return;
-  for (const who of ORDER) if (cards[who]) {
+  for (const who of Object.keys(cards)) {
     clearCard(cards[who]);
     const btn = $(".go", cards[who]);
     btn.classList.remove("again", "slim"); btn.textContent = BTN[who];
     btn.disabled = !!$(".missing", cards[who]).textContent;
   }
+  if (cards.custom) { showCustomForm(true); refreshCustom(); }
   resetRef(); usedPrompt = false;
 }
 $("#reset").addEventListener("click", resetAll);

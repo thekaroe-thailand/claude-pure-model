@@ -10,7 +10,7 @@ import path from "node:path";
 import { exec } from "node:child_process";
 import {
   ROOT, CFG, DEFAULT_PROMPT, BASELINE, ANSWER_MAX_TOKENS, PROVIDERS,
-  getReference, judge, explainError, tenixeSpend,
+  getReference, judge, explainError, tenixeSpend, makeCustomProvider, listCustomModels,
 } from "./lib/core.mjs";
 
 const HOST = "127.0.0.1";
@@ -21,8 +21,7 @@ const MAX_PROMPT = 4000;
 let tenixeBlocked = false; // โดนหักเงินฝั่ง Tenixe เมื่อไหร่ หยุดยิง Tenixe ทันที
 
 /* ═══════════════ ตรวจ 1 เจ้า — ส่ง event ทีละขั้น (NDJSON) ═══════════════ */
-async function runCheck(who, prompt, send) {
-  const p = PROVIDERS[who];
+async function runCheck(who, p, prompt, send) {
   if (!p.ready()) throw new Error(p.missing);
   if (who === "tenixe" && tenixeBlocked) throw new Error("หยุดยิง Tenixe แล้ว เพราะรอบก่อนโดนหักเครดิต");
 
@@ -80,8 +79,18 @@ function readBody(req) {
 
 const json = (res, code, obj) => { res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify(obj)); };
 
+/** กันเว็บอื่นในเบราว์เซอร์แอบยิงมาที่ server นี้ (CSRF / DNS rebinding) */
+const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+function sameOrigin(req) {
+  if (!ALLOWED_HOSTS.has(req.headers.host)) return false;
+  const origin = req.headers.origin;
+  if (origin && !ALLOWED_HOSTS.has(origin.replace(/^https?:\/\//, ""))) return false;
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${HOST}`);
+  if (!ALLOWED_HOSTS.has(req.headers.host)) { res.writeHead(421); return res.end(); }
   try {
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
@@ -94,23 +103,40 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { providers, defaultPrompt: DEFAULT_PROMPT, nemotronModel: CFG.nemotron });
     }
 
-    const m = url.pathname.match(/^\/api\/check\/(claude|kob|tenixe)$/);
+    if (req.method === "POST" && url.pathname === "/api/models") {
+      if (!sameOrigin(req) || !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
+        return json(res, 403, { error: "ปฏิเสธคำขอจากที่อื่น" });
+      }
+      const body = JSON.parse((await readBody(req)) || "{}");
+      try { return json(res, 200, { models: await listCustomModels(body.custom) }); }
+      catch (e) { return json(res, 400, { error: String(e?.message ?? e) }); }
+    }
+
+    const m = url.pathname.match(/^\/api\/check\/(claude|kob|tenixe|custom)$/);
     if (req.method === "POST" && m) {
+      if (!sameOrigin(req) || !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
+        return json(res, 403, { error: "ปฏิเสธคำขอจากที่อื่น" });
+      }
       const body = JSON.parse((await readBody(req)) || "{}");
       const prompt = String(body.prompt ?? "").trim() || DEFAULT_PROMPT;
       if (prompt.length > MAX_PROMPT) return json(res, 400, { error: `prompt ยาวเกิน ${MAX_PROMPT} ตัวอักษร` });
 
+      const who = m[1];
+      let p;
+      try { p = who === "custom" ? makeCustomProvider(body.custom) : PROVIDERS[who]; }
+      catch (e) { return json(res, 400, { error: String(e?.message ?? e) }); }
+
       res.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
       const send = (ev) => { if (!res.writableEnded) res.write(JSON.stringify(ev) + "\n"); };
-      const who = m[1];
       const started = Date.now();
-      console.log(`▶ ตรวจ ${PROVIDERS[who].name}`);
+      console.log(`▶ ตรวจ ${p.title}`);
       try {
-        await runCheck(who, prompt, send);
-        console.log(`✔ ${PROVIDERS[who].name} เสร็จใน ${Date.now() - started} ms`);
+        await runCheck(who, p, prompt, send);
+        console.log(`✔ ${p.name} เสร็จใน ${Date.now() - started} ms`);
       } catch (e) {
-        const msg = who === "claude" ? explainError(e) : String(e?.message ?? e);
-        console.log(`✘ ${PROVIDERS[who].name}: ${msg}`);
+        let msg = who === "claude" ? explainError(e) : String(e?.message ?? e);
+        if (p.redact) msg = p.redact(msg);
+        console.log(`✘ ${p.name}: ${msg}`);
         send({ type: "error", message: msg });
       }
       send({ type: "end" });

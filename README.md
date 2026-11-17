@@ -12,6 +12,7 @@
    ```
    npm install
    npm run web        # หน้าเว็บ http://127.0.0.1:3000 กดเช็คทีละ endpoint
+                      # ปุ่ม "＋ ตรวจเจ้าอื่น" กรอก URL / key / model เพื่อเช็ค endpoint อื่นได้
    npm run compare    # เทียบผลหลาย endpoint ในหน้าเดียว (บันทึกไว้ที่ results/)
    npm run prove      # เทียบด้วยข้อความหลายแบบ (บันทึกไว้ที่ results/)
    ```
